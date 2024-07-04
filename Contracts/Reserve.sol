@@ -71,7 +71,7 @@ contract Reserve is Ownable {
     }
 
     /**
-     * @notice Allows the owner to withdraw Token from the contract for business investment.
+     * @notice Allows the owner to withdraw Token from the contract.
      * @param amount Amount of Token to withdraw.
      * @param memo Memo or description of the withdrawal.
      */

@@ -6,14 +6,15 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/security/Pausable.sol";
 import "@uniswap/v2-periphery/contracts/IUniswapV2Router02.sol";
 import "./IReserve.sol";
+import "./ICommissionController.sol";
 import "./IShare.sol";
 
 /**
  * @author https://github.com/alishaheen232
  * @title  ICO Presale Smart Contract
- * @notice This presale contract manages user funds for a project without intermediaries. Users can buy tokens using USDT. 
+ * @notice This presale contract manages user funds for a project without intermediaries. Users can buy tokens using USDT.
  * The owner can pause the contract and withdraw funds. The contract includes functionality for sales agents and commission calculations.
- * 
+ *
  * Requirements:
  *
  * - Token contract should be previously deployed, then deploy this presale contract by passing
@@ -24,44 +25,33 @@ import "./IShare.sol";
 
 contract Presale is Ownable, Pausable {
     struct Memo {
-        address user;       // Address of the user involved in the transaction
-        uint256 usdtAmount;     // Amount of USDT involved in the transaction
-        string memo;        // Memo or description related to the transaction
-        uint256 timestamp;  // Timestamp of the transaction
+        address user; // Address of the user involved in the transaction
+        uint256 usdtAmount; // Amount of USDT involved in the transaction
+        string memo; // Memo or description related to the transaction
+        uint256 timestamp; // Timestamp of the transaction
     }
 
-    struct PurchasePercentage {
-        uint256 pp1;
-        uint256 pp2;
-        uint256 pp3;
-    }
+    IShare public immutable token;
+    IShare public immutable usdt;
+    IUniswapV2Router02 public immutable router;
+    ICommissionController public immutable commissionController;
 
-    struct CommissionPercentage {
-        uint256 cp1;
-        uint256 cp2;
-        uint256 cp3;
-    }
+    uint256 public presaleRate; // Tokens per USDT rate
+    uint256 public maxContribLimit;
+    uint256 public constant hardCap = 1000000 * 10 ** 6; // Hard cap (1,000,000 USDT)
 
-    IShare public immutable token; // Token contract instance
-    IShare public immutable usdt;  // USDT contract instance
-    IUniswapV2Router02 public immutable router; // Uniswap router instance
+    Memo[] public offChainMemos; // Array to store deposit memos
 
-    address public reservesContracts;   
-    uint256 public presaleRate;    // Tokens per USDT rate
-    uint256 public maxContribLimit; 
-    uint256 public constant hardCap = 1000000 * 10**6; // Hard cap (1,000,000 USDT)
-
-    PurchasePercentage public purchasePercentage = PurchasePercentage(100, 75, 50);
-    CommissionPercentage public commissionPercentage = CommissionPercentage(300, 250, 200);
-
-    mapping(address => bool) public salesAgents;
-    mapping(address => uint256) public salesAgentsCommission;
-
-    Memo[] public offChainMemos;   // Array to store deposit memos
-
-    event BuyTokensOffChain(address indexed buyer, uint256 usdtAmount, uint256 tokenAmount);
-    event BuyTokens(address indexed buyer, uint256 usdtAmount, uint256 tokenAmount);
-    event SalesAgentUpdated(address indexed salesAgent, bool status);
+    event BuyTokensOffChain(
+        address indexed buyer,
+        uint256 usdtAmount,
+        uint256 tokenAmount
+    );
+    event BuyTokens(
+        address indexed buyer,
+        uint256 usdtAmount,
+        uint256 tokenAmount
+    );
     event TokenDeposited(address indexed recipient, uint256 tokenAmount);
     event TransferTokens(address indexed recipient, uint256 tokenAmount);
 
@@ -75,12 +65,12 @@ contract Presale is Ownable, Pausable {
         address _tokenAddress,
         address _usdtAddress,
         address _routerAddress,
-        address _reservesContracts
+        address _commissionController
     ) Ownable(msg.sender) {
         token = IShare(_tokenAddress);
-        router = IUniswapV2Router02(_routerAddress);
         usdt = IShare(_usdtAddress);
-        reservesContracts = _reservesContracts;
+        router = IUniswapV2Router02(_routerAddress);
+        commissionController = ICommissionController(_commissionController);
 
         maxContribLimit = token._marketAccount() / 200; // 0.5% of total market volume
     }
@@ -90,37 +80,33 @@ contract Presale is Ownable, Pausable {
      * @param usdtAmount Amount of USDT to spend.
      * @param salesAgent Address of the sales agent.
      */
-    function buyTokens(uint256 usdtAmount, address salesAgent) public whenNotPaused {
-        require(usdt.balanceOf(address(this)) + usdtAmount <= hardCap, "Hard cap");
-  
-        if(salesAgent == address(0)) salesAgent = reservesContracts;
-  
-        // address[] memory path = [address(token), address(usdt)];
+    function buyTokens(
+        uint256 usdtAmount,
+        address salesAgent
+    ) public whenNotPaused {
+        require(
+            usdt.balanceOf(address(this)) + usdtAmount <= hardCap,
+            "Hard cap"
+        );
+
         address[] memory path = new address[](2);
         path[0] = address(token);
         path[1] = address(usdt);
 
-        uint256[] memory amountsOut = router.getAmountsOut(1 * 10**18, path);
+        uint256[] memory amountsOut = router.getAmountsOut(1 * 10 ** 18, path);
         presaleRate = amountsOut[1];
         uint256 tokenAmount = usdtAmount / presaleRate;
 
         require(tokenAmount <= maxContribLimit, "Max contribution");
-        require(token.balanceOf(address(this)) >= tokenAmount, "Low token balance");
+        require(
+            token.balanceOf(address(this)) >= tokenAmount,
+            "Low token balance"
+        );
 
-        uint256 commissionAmount;
-        if ((tokenAmount * 100) / maxContribLimit <= purchasePercentage.pp1 && (tokenAmount * 100) / maxContribLimit >= purchasePercentage.pp2) {
-            commissionAmount = (tokenAmount * commissionPercentage.cp1) / 10000;
-        } else if ((tokenAmount * 100) / maxContribLimit < purchasePercentage.pp2 && (tokenAmount * 100) / maxContribLimit >= purchasePercentage.pp3) {
-            commissionAmount = (tokenAmount * commissionPercentage.cp2) / 10000;
-        } else {
-            commissionAmount = (tokenAmount * commissionPercentage.cp3) / 10000;
-        }
-
-        salesAgentsCommission[salesAgent] += commissionAmount;
+        commissionController.requestCommission(salesAgent, tokenAmount);
 
         usdt.transferFrom(msg.sender, address(this), usdtAmount);
         token.transfer(msg.sender, tokenAmount);
-        token.transfer(salesAgent, commissionAmount);
 
         emit BuyTokens(msg.sender, usdtAmount, tokenAmount);
     }
@@ -130,33 +116,27 @@ contract Presale is Ownable, Pausable {
      * @param user Address of the user.
      * @param usdtAmount Amount of USDT to spend.
      */
-    function buyTokensOffChain(address user, uint256 usdtAmount) public whenNotPaused {
+    function buyTokensOffChain(
+        address user,
+        uint256 usdtAmount
+    ) public whenNotPaused {
         require(salesAgents[msg.sender], "Not sales agent");
-   
-        if(salesAgent == address(0)) salesAgent = reservesContracts;
 
-        address[] memory path = [address(token), address(usdt)];
-        // address[] memory path = new address[](2);
-        // path[0] = address(token);
-        // path[1] = address(usdt);
+        address[] memory path = new address[](2);
+        path[0] = address(token);
+        path[1] = address(usdt);
 
-        uint256[] memory amountsOut = router.getAmountsOut(1 * 10**18, path);
+        uint256[] memory amountsOut = router.getAmountsOut(1 * 10 ** 18, path);
         presaleRate = amountsOut[1];
         uint256 tokenAmount = usdtAmount / presaleRate;
 
         require(tokenAmount <= maxContribLimit, "Max contribution");
-        require(token.balanceOf(address(this)) >= tokenAmount, "Low token balance");
+        require(
+            token.balanceOf(address(this)) >= tokenAmount,
+            "Low token balance"
+        );
 
-        uint256 commissionAmount;
-        if ((tokenAmount * 100) / maxContribLimit <= purchasePercentage.pp1 && (tokenAmount * 100) / maxContribLimit >= purchasePercentage.pp2) {
-            commissionAmount = (tokenAmount * commissionPercentage.cp1) / 10000;
-        } else if ((tokenAmount * 100) / maxContribLimit < purchasePercentage.pp2 && (tokenAmount * 100) / maxContribLimit >= purchasePercentage.pp3) {
-            commissionAmount = (tokenAmount * commissionPercentage.cp2) / 10000;
-        } else {
-            commissionAmount = (tokenAmount * commissionPercentage.cp3) / 10000;
-        }
-
-        salesAgentsCommission[msg.sender] += commissionAmount;
+        commissionController.requestCommission(msg.sender, tokenAmount);
 
         token.transfer(user, tokenAmount);
         token.transfer(msg.sender, commissionAmount);
@@ -172,8 +152,11 @@ contract Presale is Ownable, Pausable {
      */
     function depositTokens(uint256 tokenAmount) external onlyOwner {
         require(tokenAmount > 0, "Zero amount");
-        require(token.allowance(msg.sender, address(this)) >= tokenAmount, "Low allowance");
-        
+        require(
+            token.allowance(msg.sender, address(this)) >= tokenAmount,
+            "Low allowance"
+        );
+
         token.transferFrom(msg.sender, address(this), tokenAmount);
         emit TokenDeposited(msg.sender, tokenAmount);
     }
@@ -183,10 +166,16 @@ contract Presale is Ownable, Pausable {
      * @param _token Address of the ERC20 token contract.
      * @param tokenAmount Amount of tokens to remove.
      */
-    function removeERC20Tokens(address _token, uint256 tokenAmount) external onlyOwner {
+    function removeERC20Tokens(
+        address _token,
+        uint256 tokenAmount
+    ) external onlyOwner {
         require(tokenAmount > 0, "Zero amount");
-        require(IShare(_token).balanceOf(address(this)) >= tokenAmount, "Low token balance");
-        
+        require(
+            IShare(_token).balanceOf(address(this)) >= tokenAmount,
+            "Low token balance"
+        );
+
         IShare(_token).transfer(msg.sender, tokenAmount);
         emit TransferTokens(msg.sender, tokenAmount);
     }
@@ -197,8 +186,11 @@ contract Presale is Ownable, Pausable {
      */
     function transferUSDT(uint256 usdtAmount) external onlyOwner {
         require(usdtAmount > 0, "Zero amount");
-        require(usdt.balanceOf(address(this)) >= usdtAmount, "Low USDT balance");
-        
+        require(
+            usdt.balanceOf(address(this)) >= usdtAmount,
+            "Low USDT balance"
+        );
+
         usdt.transfer(msg.sender, usdtAmount);
     }
 
@@ -207,7 +199,10 @@ contract Presale is Ownable, Pausable {
      * @param salesAgent Address of the sales agent.
      * @param status Boolean status of the sales agent.
      */
-    function setSalesAgents(address salesAgent, bool status) external onlyOwner {
+    function setSalesAgents(
+        address salesAgent,
+        bool status
+    ) external onlyOwner {
         salesAgents[salesAgent] = status;
         emit SalesAgentUpdated(salesAgent, status);
     }
@@ -217,7 +212,7 @@ contract Presale is Ownable, Pausable {
      * @param denominator Denominator to calculate the maximum contribution limit.
      */
     function setMaxContribLimit(uint256 denominator) external onlyOwner {
-        maxContribLimit = token._marketAccount() / denominator; 
+        maxContribLimit = token._marketAccount() / denominator;
     }
 
     /**
