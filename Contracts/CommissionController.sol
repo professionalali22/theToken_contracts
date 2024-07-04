@@ -17,18 +17,24 @@ contract CommissionController is Ownable {
         uint256 cp3;
     }
 
-    PurchasePercentage public purchasePercentage =
+    PurchasePercentage public _purchasePercentage =
         PurchasePercentage(100, 75, 50);
-    CommissionPercentage public commissionPercentage =
+
+    CommissionPercentage public _commissionPercentage =
         CommissionPercentage(300, 250, 200);
 
-    address public _admin;
     IERC20 public _token;
+    address public _admin;
+    address public _reservesContracts;
+    bool public _commissionTransfer;
+    uint256 public _maxContribLimit;
+
 
     mapping(address => bool) public _salesAgents;
     mapping(address => bool) public _requester;
     mapping(address => uint256) public _salesAgentsCommission;
 
+    event CommissionTransferUpdated(bool status);
     event SalesAgentUpdated(address salesAgent, bool status);
     event RequesterUpdated(address requester, bool status);
     event CommissionDistributed(address salesAgent, uint256 amount);
@@ -38,36 +44,44 @@ contract CommissionController is Ownable {
         address token,
         address reservesContracts
     ) Ownable(msg.sender) {
-        admin = admin;
-        token = IERC20(token);
-        _salesAgents[reservesContracts] = true;
+        _admin = admin;
+        _token = IERC20(token);
+        _reservesContracts = reservesContracts;
+        _salesAgents[_reservesContracts] = true;
+        _maxContribLimit = token._marketAccount() / 200; // 0.5% of total market volume
+
+        // _commissionTransfer is by-default false
     }
 
     function requestCommission(
         address salesAgent,
         uint256 sellingAmount
     ) external {
+        if(!_commissionTransfer) return;
+
         require(_requester[msg.sender], "Not authorised");
-        if (salesAgent == address(0)) salesAgent = reservesContracts;
+        if (salesAgent == address(0)) salesAgent = _reservesContracts;
         require(_salesAgents[salesAgent], "Not an agent");
 
         uint256 commissionAmount;
+        uint256 purcahsePercentage = (sellingAmount * 100) / _maxContribLimit;
+
         if (
-            (tokenAmount * 100) / maxContribLimit <= purchasePercentage.pp1 &&
-            (tokenAmount * 100) / maxContribLimit >= purchasePercentage.pp2
+            purcahsePercentage <= _purchasePercentage.pp1 &&
+            purcahsePercentage >= _purchasePercentage.pp2
         ) {
-            commissionAmount = (tokenAmount * commissionPercentage.cp1) / 10000;
+            commissionAmount = (sellingAmount * _commissionPercentage.cp1) / 10000;
         } else if (
-            (tokenAmount * 100) / maxContribLimit < purchasePercentage.pp2 &&
-            (tokenAmount * 100) / maxContribLimit >= purchasePercentage.pp3
+            purcahsePercentage < _purchasePercentage.pp2 &&
+            purcahsePercentage >= _purchasePercentage.pp3
         ) {
-            commissionAmount = (tokenAmount * commissionPercentage.cp2) / 10000;
+            commissionAmount = (sellingAmount * _commissionPercentage.cp2) / 10000; // add 18 zeros accordingly
         } else {
-            commissionAmount = (tokenAmount * commissionPercentage.cp3) / 10000;
+            commissionAmount = (sellingAmount * _commissionPercentage.cp3) / 10000;
         }
 
-        salesAgentsCommission[salesAgent] += commissionAmount;
-        token.transfer(salesAgent, commissionAmount);
+        _salesAgentsCommission[salesAgent] += commissionAmount;
+        _token.transfer(salesAgent, commissionAmount);
 
         emit CommissionDistributed(salesAgent, commissionAmount);
     }
@@ -94,6 +108,12 @@ contract CommissionController is Ownable {
         emit SalesAgentUpdated(salesAgent, status);
     }
 
+    function setCommissionTransfer(bool status) external {
+        require(_admin == msg.sender, "Not Admin");
+        _commissionTransfer = status;
+        emit CommissionTransferUpdated(status);
+    }
+
     /**
      * @notice Allows the owner to withdraw Token from the contract.
      * @param amount Amount of Token to withdraw.
@@ -110,5 +130,13 @@ contract CommissionController is Ownable {
             "Insufficient balance"
         );
         IERC20(token).transfer(msg.sender, amount);
+    }
+
+    /**
+     * @notice Allows the owner to set the maximum contribution limit.
+     * @param denominator Denominator to calculate the maximum contribution limit.
+     */
+    function setMaxContribLimit(uint256 denominator) external onlyOwner {
+        maxContribLimit = token._marketAccount() / denominator;
     }
 }

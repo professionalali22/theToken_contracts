@@ -103,7 +103,9 @@ contract Presale is Ownable, Pausable {
             "Low token balance"
         );
 
-        commissionController.requestCommission(salesAgent, tokenAmount);
+        uint256 purcahsePercentage = (tokenAmount * 100) / maxContribLimit;
+
+        commissionController.requestCommission(salesAgent, purcahsePercentage);
 
         usdt.transferFrom(msg.sender, address(this), usdtAmount);
         token.transfer(msg.sender, tokenAmount);
@@ -212,7 +214,7 @@ contract Presale is Ownable, Pausable {
      * @param denominator Denominator to calculate the maximum contribution limit.
      */
     function setMaxContribLimit(uint256 denominator) external onlyOwner {
-        maxContribLimit = token._marketAccount() / denominator;
+        maxContribLimit = ICommissionController._maxContribLimit();
     }
 
     /**
