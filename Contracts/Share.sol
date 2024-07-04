@@ -8,8 +8,8 @@ import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
 import "@openzeppelin/contracts/access/Ownable2Step.sol";
 
 contract MyToken is ERC20, ERC20Burnable, ERC20Permit, Ownable2Step {
-    mapping (address => bool) private _iswhitelistAddress;    
-    mapping (address => bool) private _exchangeAddress; 
+    mapping (address => bool) public _iswhitelistAddress;    
+    mapping (address => bool) public _exchangeAddress; 
 
     uint256 public _buyTax;  
     uint256 public _sellTax;
@@ -87,10 +87,6 @@ contract MyToken is ERC20, ERC20Burnable, ERC20Permit, Ownable2Step {
         return (amount * fee) /(10000);
     }
 
-    function getWhiteListStatus(address account) public view returns(bool) {
-        return _iswhitelistAddress[account];
-    }
-
     function setWhiteListStatus(address account, bool status) public onlyOwner {
         _iswhitelistAddress[account] = status;
     }
@@ -101,10 +97,6 @@ contract MyToken is ERC20, ERC20Burnable, ERC20Permit, Ownable2Step {
         _buyTax = buyTax;  
         _sellTax = sellTax;
         _transferTax = transferTax;
-    }
-
-    function getExchangeAddress(address account) public view returns(bool) {
-        return _exchangeAddress[account];
     }
 
     function setExchangeAddress(address account, bool status) public onlyOwner {
