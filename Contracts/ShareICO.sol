@@ -5,9 +5,9 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/security/Pausable.sol";
 import "@uniswap/v2-periphery/contracts/IUniswapV2Router02.sol";
-import "./IReserve.sol";
-import "./ICommissionController.sol";
-import "./IShare.sol";
+import "./interfaces/IReserve.sol";
+import "./interfaces/ICommissionController.sol";
+import "./interfaces/IShare.sol";
 
 /**
  * @author https://github.com/alishaheen232
@@ -52,8 +52,6 @@ contract Presale is Ownable, Pausable {
         uint256 usdtAmount,
         uint256 tokenAmount
     );
-    event TokenDeposited(address indexed recipient, uint256 tokenAmount);
-    event TransferTokens(address indexed recipient, uint256 tokenAmount);
 
     /**
      * @notice Constructor to initialize the presale contract.
@@ -160,7 +158,6 @@ contract Presale is Ownable, Pausable {
         );
 
         token.transferFrom(msg.sender, address(this), tokenAmount);
-        emit TokenDeposited(msg.sender, tokenAmount);
     }
 
     /**
@@ -179,7 +176,6 @@ contract Presale is Ownable, Pausable {
         );
 
         IShare(_token).transfer(msg.sender, tokenAmount);
-        emit TransferTokens(msg.sender, tokenAmount);
     }
 
     /**
@@ -211,9 +207,8 @@ contract Presale is Ownable, Pausable {
 
     /**
      * @notice Allows the owner to set the maximum contribution limit.
-     * @param denominator Denominator to calculate the maximum contribution limit.
      */
-    function setMaxContribLimit(uint256 denominator) external onlyOwner {
+    function setMaxContribLimit() external onlyOwner {
         maxContribLimit = ICommissionController._maxContribLimit();
     }
 

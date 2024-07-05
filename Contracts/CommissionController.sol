@@ -133,6 +133,37 @@ contract CommissionController is Ownable {
     }
 
     /**
+     * @notice Allows the owner to deposit tokens into the contract.
+     * @param tokenAmount Amount of tokens to deposit.
+     */
+    function depositTokens(uint256 tokenAmount) external onlyOwner {
+        require(tokenAmount > 0, "Zero amount");
+        require(
+            token.allowance(msg.sender, address(this)) >= tokenAmount,
+            "Low allowance"
+        );
+
+        token.transferFrom(msg.sender, address(this), tokenAmount);
+    }
+    
+    /**
+     * @notice Allows the owner to remove ERC20 tokens from the contract.
+     * @param _token Address of the ERC20 token contract.
+     * @param tokenAmount Amount of tokens to remove.
+     */
+    function removeERC20Tokens(
+        address _token,
+        uint256 tokenAmount
+    ) external onlyOwner {
+        require(tokenAmount > 0, "Zero amount");
+        require(
+            IShare(_token).balanceOf(address(this)) >= tokenAmount,
+            "Low token balance"
+        );
+
+        IShare(_token).transfer(msg.sender, tokenAmount);
+    }
+    /**
      * @notice Allows the owner to set the maximum contribution limit.
      * @param denominator Denominator to calculate the maximum contribution limit.
      */

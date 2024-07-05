@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
-import "./IShare.sol";
+import "./interfaces/IShare.sol";
 
 /**
  * @title  AirdropShare Contract
