@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity =0.6.6;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "./openzeppelin/contracts/access/Ownable.sol";
 import "./v2-core/contracts/interfaces/IUniswapV2Factory.sol";
 import "./solidity-lib/contracts/libraries/TransferHelper.sol";
 import "./v2-periphery/interfaces/IUniswapV2Router02.sol";

@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
+import "./openzeppelin/contracts/access/Ownable.sol";
+import "./uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
 import "./interfaces/IShare.sol";
 
 /**
  * @title  AirdropShare Contract
- * @notice This contract facilitates airdrops of SHARE tokens to holders and liquidity providers (LPs). It records transaction details 
- *         including user addresses, transaction amounts, memos, and timestamps for both deposit and airdrop actions. 
- * 
+ * @notice This contract facilitates airdrops of SHARE tokens to holders and liquidity providers (LPs). It records transaction details
+ *         including user addresses, transaction amounts, memos, and timestamps for both deposit and airdrop actions.
+ *
  * Requirements:
  *
  * - The contract must be initialized with the SHARE token address and the USDT token address.
@@ -17,21 +17,21 @@ import "./interfaces/IShare.sol";
  */
 
 contract AirdropShare is Ownable {
-    IShare public token;  
-    IShare public usdt;   
+    IShare public token;
+    IShare public usdt;
 
     struct Memo {
-        address user;       
-        uint256 amount;     
-        string memo;        
-        uint256 timestamp;  
+        address user;
+        uint256 amount;
+        string memo;
+        uint256 timestamp;
     }
 
     Memo[] public lPProviderAirdropMemos;
-    Memo[] public holderAirdropMemos;    
+    Memo[] public holderAirdropMemos;
 
-    event Deposit(address indexed from, uint256 amount, string memo);    // Event emitted on deposit
-    event Withdraw(address indexed to, uint256 amount, string memo);     // Event emitted on withdrawal
+    event Deposit(address indexed from, uint256 amount, string memo); // Event emitted on deposit
+    event Withdraw(address indexed to, uint256 amount, string memo); // Event emitted on withdrawal
 
     /**
      * @notice Constructor to initialize the contract with the SHARE token and USDT token addresses.
@@ -44,15 +44,15 @@ contract AirdropShare is Ownable {
     }
 
     /**
-    * @notice Allows users to deposit SHARE tokens into the contract. 
-    * Users must approve the specified amount to this contract before calling this method.
-    * @param amount Amount of SHARE tokens to deposit.
-    * @param memo Memo or description of the deposit.
-    */
+     * @notice Allows users to deposit SHARE tokens into the contract.
+     * Users must approve the specified amount to this contract before calling this method.
+     * @param amount Amount of SHARE tokens to deposit.
+     * @param memo Memo or description of the deposit.
+     */
     function deposit(uint256 amount, string memory memo) external {
         require(amount > 0, "Amount must be > 0");
         token.transferFrom(msg.sender, address(this), amount);
-        
+
         emit Deposit(msg.sender, amount, memo);
     }
 
@@ -62,7 +62,11 @@ contract AirdropShare is Ownable {
      * @param amount Total amount of SHARE tokens to be airdropped.
      * @param memo Memo or description of the airdrop.
      */
-    function airdrop(address[] memory shareHolders, uint256 amount, string memory memo) external onlyOwner {
+    function airdrop(
+        address[] memory shareHolders,
+        uint256 amount,
+        string memory memo
+    ) external onlyOwner {
         uint256 marketAccount = token.marketAccount();
 
         for (uint256 i = 0; i < shareHolders.length; i++) {
@@ -72,7 +76,9 @@ contract AirdropShare is Ownable {
             require(token.transfer(user, dividend), "Transfer failed");
         }
 
-        holderAirdropMemos.push(Memo(msg.sender, amount, memo, block.timestamp));
+        holderAirdropMemos.push(
+            Memo(msg.sender, amount, memo, block.timestamp)
+        );
     }
 
     /**
@@ -82,12 +88,21 @@ contract AirdropShare is Ownable {
      * @param amount Total amount of SHARE tokens to be airdropped.
      * @param memo Memo or description of the airdrop.
      */
-    function airdropLPProvider(address exchange, address[] memory lPProviders, uint256 amount, string memory memo) external onlyOwner {
+    function airdropLPProvider(
+        address exchange,
+        address[] memory lPProviders,
+        uint256 amount,
+        string memory memo
+    ) external onlyOwner {
         IUniswapV2Pair _exchange = IUniswapV2Pair(exchange);
         address token0 = _exchange.token0();
         address token1 = _exchange.token1();
-        
-        require((token0 == address(token) || token0 == address(usdt)) && (token1 == address(token) || token1 == address(usdt)), "Invalid exchange");
+
+        require(
+            (token0 == address(token) || token0 == address(usdt)) &&
+                (token1 == address(token) || token1 == address(usdt)),
+            "Invalid exchange"
+        );
 
         (uint112 reserve0, uint112 reserve1, ) = _exchange.getReserves();
         require(reserve0 > 0 && reserve1 > 0, "Zero reserves");
@@ -101,7 +116,9 @@ contract AirdropShare is Ownable {
             require(token.transfer(user, dividend), "Transfer failed");
         }
 
-        lPProviderAirdropMemos.push(Memo(msg.sender, amount, memo, block.timestamp));
+        lPProviderAirdropMemos.push(
+            Memo(msg.sender, amount, memo, block.timestamp)
+        );
     }
 
     /**
@@ -111,7 +128,10 @@ contract AirdropShare is Ownable {
      */
     function withdrawToken(address _token, uint256 amount) external onlyOwner {
         require(amount > 0, "Amount must be > 0");
-        require(IERC20(_token).balanceOf(address(this)) >= amount, "Insufficient balance");
+        require(
+            IERC20(_token).balanceOf(address(this)) >= amount,
+            "Insufficient balance"
+        );
         IERC20(_token).transfer(msg.sender, amount);
     }
 
