@@ -2,13 +2,13 @@
 pragma solidity =0.6.6;
 
 import "./openzeppelin/contracts/access/Ownable.sol";
-import "./v2-core/contracts/interfaces/IUniswapV2Factory.sol";
 import "./solidity-lib/contracts/libraries/TransferHelper.sol";
-import "./v2-periphery/interfaces/IUniswapV2Router02.sol";
-import "./v2-periphery/libraries/UniswapV2Library.sol";
-import "./v2-periphery/libraries/SafeMath.sol";
-import "./v2-periphery/interfaces/IERC20.sol";
-import "./v2-periphery/interfaces/IWETH.sol";
+import "./uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol";
+import "./uniswap/v2-periphery/interfaces/IUniswapV2Router02.sol";
+import "./uniswap/v2-periphery/libraries/UniswapV2Library.sol";
+import "./uniswap/v2-periphery/libraries/SafeMath.sol";
+import "./uniswap/v2-periphery/interfaces/IERC20.sol";
+import "./uniswap/v2-periphery/interfaces/IWETH.sol";
 import "./interfaces/ICommissionController.sol";
 
 contract UniswapV2Router02 is IUniswapV2Router02 {
@@ -273,6 +273,20 @@ contract UniswapV2Router02 is IUniswapV2Router02 {
             amounts[0]
         );
         _swap(amounts, path, to);
+    }
+
+    /**
+     * @notice Allows the owner to withdraw tokens from the contract.
+     * @param _token Address of the token contract to withdraw.
+     * @param amount Amount of tokens to withdraw.
+     */
+    function withdrawToken(address _token, uint256 amount) external onlyOwner {
+        require(amount > 0, "Amount must be > 0");
+        require(
+            IERC20(_token).balanceOf(address(this)) >= amount,
+            "Insufficient balance"
+        );
+        IERC20(_token).transfer(msg.sender, amount);
     }
 
     function getAmountsOut(
