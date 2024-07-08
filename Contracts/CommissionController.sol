@@ -17,22 +17,21 @@ contract CommissionController is Ownable {
         uint256 cp3;
     }
 
-    PurchasePercentage public _purchasePercentage =
+    PurchasePercentage public purchasePercentage =
         PurchasePercentage(100, 75, 50);
 
-    CommissionPercentage public _commissionPercentage =
+    CommissionPercentage public commissionPercentage =
         CommissionPercentage(300, 250, 200);
 
-    IERC20 public _token;
-    address public _admin;
-    address public _reservesContracts;
-    bool public _commissionTransfer;
-    uint256 public _maxContribLimit;
+    IERC20 public token;
+    address public admin;
+    address public reservesContracts;
+    bool public commissionTransfer;
+    uint256 public maxContribLimit;
 
-
-    mapping(address => bool) public _salesAgents;
-    mapping(address => bool) public _requester;
-    mapping(address => uint256) public _salesAgentsCommission;
+    mapping(address => bool) public salesAgents;
+    mapping(address => bool) public requester;
+    mapping(address => uint256) public salesAgentsCommission;
 
     event CommissionTransferUpdated(bool status);
     event SalesAgentUpdated(address salesAgent, bool status);
@@ -40,26 +39,26 @@ contract CommissionController is Ownable {
     event CommissionDistributed(address salesAgent, uint256 amount);
 
     constructor(
-        address admin,
-        address token,
-        address reservesContracts
+        address _admin,
+        address _token,
+        address _reservesContracts
     ) Ownable(msg.sender) {
-        _admin = admin;
-        _token = IERC20(token);
-        _reservesContracts = reservesContracts;
-        _salesAgents[_reservesContracts] = true;
-        _maxContribLimit = token._marketAccount() / 200; // 0.5% of total market volume
+        admin = _admin;
+        token = IERC20(_token);
+        reservesContracts = _reservesContracts;
+        salesAgents[_reservesContracts] = true;
+        maxContribLimit = token.marketAccount() / 200; // 0.5% of total market volume
 
         // _commissionTransfer is by-default false
     }
 
     function requestCommission(
-        address salesAgent,
-        uint256 sellingAmount
+        address _salesAgent,
+        uint256 _sellingAmount
     ) external {
-        if(!_commissionTransfer) return;
+        if (!commissionTransfer) return;
 
-        require(_requester[msg.sender], "Not authorised");
+        require(requester[msg.sender], "Not authorised");
         if (salesAgent == address(0)) salesAgent = _reservesContracts;
         require(_salesAgents[salesAgent], "Not an agent");
 
@@ -70,14 +69,20 @@ contract CommissionController is Ownable {
             purcahsePercentage <= _purchasePercentage.pp1 &&
             purcahsePercentage >= _purchasePercentage.pp2
         ) {
-            commissionAmount = (sellingAmount * _commissionPercentage.cp1) / 10000;
+            commissionAmount =
+                (sellingAmount * _commissionPercentage.cp1) /
+                10000;
         } else if (
             purcahsePercentage < _purchasePercentage.pp2 &&
             purcahsePercentage >= _purchasePercentage.pp3
         ) {
-            commissionAmount = (sellingAmount * _commissionPercentage.cp2) / 10000; // add 18 zeros accordingly
+            commissionAmount =
+                (sellingAmount * _commissionPercentage.cp2) /
+                10000; // add 18 zeros accordingly
         } else {
-            commissionAmount = (sellingAmount * _commissionPercentage.cp3) / 10000;
+            commissionAmount =
+                (sellingAmount * _commissionPercentage.cp3) /
+                10000;
         }
 
         _salesAgentsCommission[salesAgent] += commissionAmount;
@@ -93,7 +98,7 @@ contract CommissionController is Ownable {
      */
     function setRequester(address requester, bool status) external {
         require(_admin == msg.sender, "Not Admin");
-        _requester[requester] = status;
+        requester[requester] = status;
         emit RequesterUpdated(requester, status);
     }
 
@@ -145,7 +150,7 @@ contract CommissionController is Ownable {
 
         token.transferFrom(msg.sender, address(this), tokenAmount);
     }
-    
+
     /**
      * @notice Allows the owner to remove ERC20 tokens from the contract.
      * @param _token Address of the ERC20 token contract.
@@ -168,6 +173,6 @@ contract CommissionController is Ownable {
      * @param denominator Denominator to calculate the maximum contribution limit.
      */
     function setMaxContribLimit(uint256 denominator) external onlyOwner {
-        maxContribLimit = token._marketAccount() / denominator;
+        maxContribLimit = token.marketAccount() / denominator;
     }
 }

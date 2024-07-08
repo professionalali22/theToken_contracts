@@ -34,7 +34,7 @@ contract UniswapV2Router02 is IUniswapV2Router02 {
         WETH = _WETH;
         commissionController = ICommissionController(_commissionController);
 
-        maxContribLimit = token._marketAccount() / 200; // 0.5% of total market volume
+        maxContribLimit = token.marketAccount() / 200; // 0.5% of total market volume
     }
 
     receive() external payable {
@@ -50,7 +50,7 @@ contract UniswapV2Router02 is IUniswapV2Router02 {
      * @notice Allows the owner to set the maximum contribution limit.
      */
     function setMaxContribLimit() external onlyOwner {
-        maxContribLimit = ICommissionController._maxContribLimit();
+        maxContribLimit = ICommissionController.maxContribLimit();
     }
 
     // **** ADD LIQUIDITY ****
