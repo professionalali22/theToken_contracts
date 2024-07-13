@@ -4,6 +4,17 @@ pragma solidity ^0.8.20;
 import "./openzeppelin/contracts/access/Ownable.sol";
 import "./openzeppelin/contracts/token/ERC20/IERC20.sol";
 
+/**
+ * @title CommissionController Contract
+ * @notice This contract manages commissions for sales agents and handles token distribution.
+ * 
+ * Requirements:
+ * 
+ * - The contract must be initialized with the admin address, token address, and reserves contract address.
+ * - Only the admin can update requester and sales agent statuses.
+ * - The owner can deposit and withdraw tokens.
+ */
+
 contract CommissionController is Ownable {
     struct PurchasePercentage {
         uint256 pp1;
@@ -17,11 +28,8 @@ contract CommissionController is Ownable {
         uint256 cp3;
     }
 
-    PurchasePercentage public purchasePercentage =
-        PurchasePercentage(100, 75, 50);
-
-    CommissionPercentage public commissionPercentage =
-        CommissionPercentage(300, 250, 200);
+    PurchasePercentage public purchasePercentage = PurchasePercentage(100, 75, 50);
+    CommissionPercentage public commissionPercentage = CommissionPercentage(300, 250, 200);
 
     IERC20 public token;
     address public admin;
@@ -38,6 +46,12 @@ contract CommissionController is Ownable {
     event RequesterUpdated(address requester, bool status);
     event CommissionDistributed(address salesAgent, uint256 amount);
 
+    /**
+     * @notice Constructor to initialize the contract with admin, token, and reserves contract addresses.
+     * @param _admin Address of the admin.
+     * @param _token Address of the token contract.
+     * @param _reservesContracts Address of the reserves contract.
+     */
     constructor(
         address _admin,
         address _token,
@@ -48,10 +62,13 @@ contract CommissionController is Ownable {
         reservesContracts = _reservesContracts;
         salesAgents[_reservesContracts] = true;
         maxContribLimit = token.marketAccount() / 200; // 0.5% of total market volume
-
-        // _commissionTransfer is by-default false
     }
 
+    /**
+     * @notice Request commission for a sales agent based on the selling amount.
+     * @param _salesAgent Address of the sales agent.
+     * @param _sellingAmount Amount of tokens sold.
+     */
     function requestCommission(
         address _salesAgent,
         uint256 _sellingAmount
@@ -59,82 +76,79 @@ contract CommissionController is Ownable {
         if (!commissionTransfer) return;
 
         require(requester[msg.sender], "Not authorised");
-        if (salesAgent == address(0)) salesAgent = _reservesContracts;
-        require(_salesAgents[salesAgent], "Not an agent");
+        if (_salesAgent == address(0)) _salesAgent = reservesContracts;
+        require(salesAgents[_salesAgent], "Not an agent");
 
         uint256 commissionAmount;
-        uint256 purcahsePercentage = (sellingAmount * 100) / _maxContribLimit;
+        uint256 purchasePercentage = (_sellingAmount * 100) / maxContribLimit;
 
         if (
-            purcahsePercentage <= _purchasePercentage.pp1 &&
-            purcahsePercentage >= _purchasePercentage.pp2
+            purchasePercentage <= purchasePercentage.pp1 &&
+            purchasePercentage >= purchasePercentage.pp2
         ) {
             commissionAmount =
-                (sellingAmount * _commissionPercentage.cp1) /
+                (_sellingAmount * commissionPercentage.cp1) /
                 10000;
         } else if (
-            purcahsePercentage < _purchasePercentage.pp2 &&
-            purcahsePercentage >= _purchasePercentage.pp3
+            purchasePercentage < purchasePercentage.pp2 &&
+            purchasePercentage >= purchasePercentage.pp3
         ) {
             commissionAmount =
-                (sellingAmount * _commissionPercentage.cp2) /
-                10000; // add 18 zeros accordingly
+                (_sellingAmount * commissionPercentage.cp2) /
+                10000;
         } else {
             commissionAmount =
-                (sellingAmount * _commissionPercentage.cp3) /
+                (_sellingAmount * commissionPercentage.cp3) /
                 10000;
         }
 
-        _salesAgentsCommission[salesAgent] += commissionAmount;
-        _token.transfer(salesAgent, commissionAmount);
+        salesAgentsCommission[_salesAgent] += commissionAmount;
+        token.transfer(_salesAgent, commissionAmount);
 
-        emit CommissionDistributed(salesAgent, commissionAmount);
+        emit CommissionDistributed(_salesAgent, commissionAmount);
     }
 
     /**
      * @notice Allows the admin to set the status of a requester contract.
-     * @param requester Address of the requester contract.
+     * @param _requester Address of the requester contract.
      * @param status Boolean status of the requester contract.
      */
-    function setRequester(address requester, bool status) external {
-        require(_admin == msg.sender, "Not Admin");
-        requester[requester] = status;
-        emit RequesterUpdated(requester, status);
+    function setRequester(address _requester, bool status) external {
+        require(admin == msg.sender, "Not Admin");
+        requester[_requester] = status;
+        emit RequesterUpdated(_requester, status);
     }
 
     /**
      * @notice Allows the admin to set the status of a sales agent.
-     * @param salesAgent Address of the sales agent.
+     * @param _salesAgent Address of the sales agent.
      * @param status Boolean status of the sales agent.
      */
-    function setSalesAgents(address salesAgent, bool status) external {
-        require(_admin == msg.sender, "Not Admin");
-        _salesAgents[salesAgent] = status;
-        emit SalesAgentUpdated(salesAgent, status);
+    function setSalesAgents(address _salesAgent, bool status) external {
+        require(admin == msg.sender, "Not Admin");
+        salesAgents[_salesAgent] = status;
+        emit SalesAgentUpdated(_salesAgent, status);
     }
 
+    /**
+     * @notice Allows the admin to enable or disable commission transfers.
+     * @param status Boolean status of the commission transfer.
+     */
     function setCommissionTransfer(bool status) external {
-        require(_admin == msg.sender, "Not Admin");
-        _commissionTransfer = status;
+        require(admin == msg.sender, "Not Admin");
+        commissionTransfer = status;
         emit CommissionTransferUpdated(status);
     }
 
     /**
-     * @notice Allows the owner to withdraw Token from the contract.
-     * @param amount Amount of Token to withdraw.
-     * @param memo Memo or description of the withdrawal.
+     * @notice Allows the owner to withdraw tokens from the contract.
+     * @param _token Address of the token contract.
+     * @param amount Amount of tokens to withdraw.
      */
-    function withdrawToken(
-        address token,
-        uint256 amount,
-        string memory memo
-    ) external onlyOwner {
+    function withdrawToken(address _token, uint256 amount) external onlyOwner {
         require(amount > 0, "Amount must be greater than zero");
-        require(
-            IERC20(token).balanceOf(address(this)) >= amount,
-            "Insufficient balance"
-        );
-        IERC20(token).transfer(msg.sender, amount);
+        require(IERC20(_token).balanceOf(address(this)) >= amount, "Insufficient balance");
+        IERC20(_token).transfer(msg.sender, amount);
     }
 
     /**
@@ -143,10 +157,7 @@ contract CommissionController is Ownable {
      */
     function depositTokens(uint256 tokenAmount) external onlyOwner {
         require(tokenAmount > 0, "Zero amount");
-        require(
-            token.allowance(msg.sender, address(this)) >= tokenAmount,
-            "Low allowance"
-        );
+        require(token.allowance(msg.sender, address(this)) >= tokenAmount, "Low allowance");
 
         token.transferFrom(msg.sender, address(this), tokenAmount);
     }
@@ -156,18 +167,13 @@ contract CommissionController is Ownable {
      * @param _token Address of the ERC20 token contract.
      * @param tokenAmount Amount of tokens to remove.
      */
-    function removeERC20Tokens(
-        address _token,
-        uint256 tokenAmount
-    ) external onlyOwner {
+    function removeERC20Tokens(address _token, uint256 tokenAmount) external onlyOwner {
         require(tokenAmount > 0, "Zero amount");
-        require(
-            IShare(_token).balanceOf(address(this)) >= tokenAmount,
-            "Low token balance"
-        );
+        require(IERC20(_token).balanceOf(address(this)) >= tokenAmount, "Low token balance");
 
-        IShare(_token).transfer(msg.sender, tokenAmount);
+        IERC20(_token).transfer(msg.sender, tokenAmount);
     }
+
     /**
      * @notice Allows the owner to set the maximum contribution limit.
      * @param denominator Denominator to calculate the maximum contribution limit.
