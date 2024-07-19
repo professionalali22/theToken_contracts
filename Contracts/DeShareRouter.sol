@@ -11,7 +11,7 @@ import "./uniswap/v2-periphery/interfaces/IERC20.sol";
 import "./uniswap/v2-periphery/interfaces/IWETH.sol";
 import "./interfaces/ICommissionController.sol";
 
-contract UniswapV2Router02 is IUniswapV2Router02 {
+contract DeShareRouter is IUniswapV2Router02 {
     using SafeMath for uint;
 
     address public immutable override factory;
